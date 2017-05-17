@@ -87,10 +87,11 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::path::{PathBuf, Path};
 use std::process::Command;
+use std::fmt::Display;
 
 use build_helper::{run_silent, run_suppressed, output, mtime};
 
-use util::{exe, libdir, add_lib_path};
+use util::{exe, libdir, add_lib_path, OutputFolder, CiEnv};
 
 mod cc;
 mod channel;
@@ -179,6 +180,7 @@ pub struct Build {
     crates: HashMap<String, Crate>,
     is_sudo: bool,
     src_is_git: bool,
+    ci_env: CiEnv,
 }
 
 #[derive(Debug)]
@@ -272,6 +274,7 @@ impl Build {
             lldb_python_dir: None,
             is_sudo: is_sudo,
             src_is_git: src_is_git,
+            ci_env: CiEnv::current(),
         }
     }
 
@@ -507,6 +510,9 @@ impl Build {
         if self.config.vendor || self.is_sudo {
             cargo.arg("--frozen");
         }
+
+        self.ci_env.force_coloring_in_ci(&mut cargo);
+
         return cargo
     }
 
@@ -1009,6 +1015,19 @@ impl Build {
         match &self.config.channel[..] {
             "stable" | "beta" => false,
             "nightly" | _ => true,
+        }
+    }
+
+    /// Fold the output of the commands after this method into a group. The fold
+    /// ends when the returned object is dropped. Folding can only be used in
+    /// the Travis CI environment.
+    pub fn fold_output<D, F>(&self, name: F) -> Option<OutputFolder<D>>
+        where D: Display, F: FnOnce() -> D
+    {
+        if self.ci_env == CiEnv::Travis {
+            Some(OutputFolder::new(name()))
+        } else {
+            None
         }
     }
 }

@@ -19,7 +19,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{SystemTime, Instant};
+use std::fmt::Display;
 
 use filetime::{self, FileTime};
 
@@ -321,6 +322,89 @@ pub fn symlink_dir(src: &Path, dest: &Path) -> io::Result<()> {
             } else {
                 Ok(())
             }
+        }
+    }
+}
+
+/// An RAII structure that indicates all output until this instance is dropped
+/// is part of the same group. On Travis CI, these output will be folded by
+/// default. This reduces visibility of unnecessary logs, allowing developers to
+/// quickly identify the error.
+pub struct OutputFolder<D: Display> {
+    name: D,
+    start_time: SystemTime, // we need SystemTime to get the UNIX timestamp.
+}
+
+impl<D: Display> OutputFolder<D> {
+    /// Creates a new output folder with the given group name.
+    pub fn new(name: D) -> OutputFolder<D> {
+        print!("travis_fold:start:{0}\ntravis_time:start:{0}\r\x1b[0K", name);
+        OutputFolder {
+            name,
+            start_time: SystemTime::now(),
+        }
+    }
+}
+
+impl<D: Display> Drop for OutputFolder<D> {
+    fn drop(&mut self) {
+        use std::time::*;
+        use std::u64;
+
+        fn to_nanos(duration: Result<Duration, SystemTimeError>) -> u64 {
+            match duration {
+                Ok(d) => d.as_secs() * 1_000_000_000 + d.subsec_nanos() as u64,
+                Err(_) => u64::MAX,
+            }
+        }
+
+        let end_time = SystemTime::now();
+        let duration = end_time.duration_since(self.start_time);
+        let start = self.start_time.duration_since(UNIX_EPOCH);
+        let finish = end_time.duration_since(UNIX_EPOCH);
+        println!(
+            "travis_fold:end:{0}\ntravis_time:end:{0}:start={1},finish={2},duration={3}\r\x1b[0K",
+            self.name,
+            to_nanos(start),
+            to_nanos(finish),
+            to_nanos(duration)
+        );
+    }
+}
+
+/// The CI environment rustbuild is running in. This mainly affects how the logs
+/// are printed.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum CiEnv {
+    /// Not a CI environment.
+    None,
+    /// The Travis CI environment, for Linux (including Docker) and macOS builds.
+    Travis,
+    /// The AppVeyor environment, for Windows builds.
+    AppVeyor,
+}
+
+impl CiEnv {
+    /// Obtains the current CI environment.
+    pub fn current() -> CiEnv {
+        if env::var("TRAVIS").ok().map_or(false, |e| &*e == "true") {
+            CiEnv::Travis
+        } else if env::var("APPVEYOR").ok().map_or(false, |e| &*e == "True") {
+            CiEnv::AppVeyor
+        } else {
+            CiEnv::None
+        }
+    }
+
+    /// If in a CI environment, forces the command to run with colors.
+    pub fn force_coloring_in_ci(self, cmd: &mut Command) {
+        if self != CiEnv::None {
+            // Due to use of stamp/docker, the output stream of rustbuild is not
+            // a TTY in CI, so coloring is by-default turned off.
+            // The explicit `TERM=xterm` environment is needed for
+            // `--color always` to actually work. This env var was lost when
+            // compiling through the Makefile. Very strange.
+            cmd.env("TERM", "xterm").args(&["--color", "always"]);
         }
     }
 }
