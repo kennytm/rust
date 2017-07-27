@@ -17,6 +17,7 @@
 use session::Session;
 
 use syntax::ast;
+use syntax::attr::{InlineAttr, find_inline_attr};
 use syntax::visit;
 use syntax::visit::Visitor;
 
@@ -63,6 +64,14 @@ impl<'a> CheckAttrVisitor<'a> {
             struct_span_err!(self.sess, attr.span, E0518, "attribute should be applied to function")
                 .span_label(attr.span, "requires a function")
                 .emit();
+        }
+    }
+
+    /// Checks if an `#[inline(semantic)]` attribute is *not* applied to a trait.
+    fn check_inline_semantic_in_trait(&self, attrs: &[ast::Attribute]) {
+        if find_inline_attr(Some(self.sess.diagnostic()), attrs) == InlineAttr::Semantic {
+            let span = attrs.iter().rev().filter(|ia| ia.path == "inline").next().unwrap().span;
+            self.sess.span_err(span, "`#[inline(semantic)]` is not supported for trait items yet");
         }
     }
 
@@ -155,6 +164,26 @@ impl<'a> Visitor<'a> for CheckAttrVisitor<'a> {
         for attr in &item.attrs {
             self.check_attribute(attr, target);
         }
+
+        // Disallow #[inline(semantic)], since it is not yet supported.
+        match item.node {
+            ast::ItemKind::Trait(_, _, _, ref trait_items) => {
+                for trait_item in trait_items {
+                    if let ast::TraitItemKind::Method(..) = trait_item.node {
+                        self.check_inline_semantic_in_trait(&trait_item.attrs);
+                    }
+                }
+            }
+            ast::ItemKind::Impl(_, _, _, _, Some(_), _, ref impl_items) => {
+                for impl_item in impl_items {
+                    if let ast::ImplItemKind::Method(..) = impl_item.node {
+                        self.check_inline_semantic_in_trait(&impl_item.attrs);
+                    }
+                }
+            }
+            _ => {}
+        }
+
         visit::walk_item(self, item);
     }
 }

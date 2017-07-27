@@ -41,6 +41,7 @@ pub mod instcombine;
 pub mod copy_prop;
 pub mod inline;
 pub mod nll;
+pub mod caller_location_check;
 
 pub(crate) fn provide(providers: &mut Providers) {
     self::qualify_consts::provide(providers);

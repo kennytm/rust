@@ -34,6 +34,12 @@ unsafe impl<T> Array for [T; 1] {
     const LEN: usize = 1;
 }
 
+unsafe impl<T> Array for [T; 3] {
+    type Element = T;
+    type PartialStorage = [ManuallyDrop<T>; 3];
+    const LEN: usize = 3;
+}
+
 unsafe impl<T> Array for [T; 8] {
     type Element = T;
     type PartialStorage = [ManuallyDrop<T>; 8];

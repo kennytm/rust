@@ -151,6 +151,7 @@ pub mod clone;
 pub mod default;
 pub mod convert;
 pub mod borrow;
+pub mod caller;
 
 /* Core types and methods on primitives */
 

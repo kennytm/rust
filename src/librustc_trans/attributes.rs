@@ -25,7 +25,7 @@ pub fn inline(val: ValueRef, inline: InlineAttr) {
     use self::InlineAttr::*;
     match inline {
         Hint   => Attribute::InlineHint.apply_llfn(Function, val),
-        Always => Attribute::AlwaysInline.apply_llfn(Function, val),
+        Semantic | Always => Attribute::AlwaysInline.apply_llfn(Function, val),
         Never  => Attribute::NoInline.apply_llfn(Function, val),
         None   => {
             Attribute::InlineHint.unapply_llfn(Function, val);

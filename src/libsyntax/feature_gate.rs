@@ -364,6 +364,9 @@ declare_features! (
     // global allocators and their internals
     (active, global_allocator, "1.20.0", None),
     (active, allocator_internals, "1.20.0", None),
+
+    // #[inline(semantic)] attribute
+    (active, inline_semantic, "1.21.0", Some(99999)),
 );
 
 declare_features! (
@@ -1206,6 +1209,15 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                                        "declaration of a nonstandard #[main] \
                                         function may change over time, for now \
                                         a top-level `fn main()` is required");
+                }
+
+                if i.attrs.iter().any(|a| {
+                    a.check_name("inline") && a.meta_item_list().as_ref()
+                        .and_then(|m| m.first())
+                        .map_or(false, |m| m.check_name("semantic"))
+                }) {
+                    gate_feature_post!(&self, inline_semantic, i.span,
+                                       "`#[inline(semantic)]` is experimental");
                 }
             }
 

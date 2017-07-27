@@ -526,12 +526,13 @@ pub fn contains_extern_indicator(diag: &Handler, attrs: &[Attribute]) -> bool {
         find_export_name_attr(diag, attrs).is_some()
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum InlineAttr {
     None,
     Hint,
     Always,
     Never,
+    Semantic,
 }
 
 /// Determine what `#[inline]` attribute is present in `attrs`, if any.
@@ -558,6 +559,8 @@ pub fn find_inline_attr(diagnostic: Option<&Handler>, attrs: &[Attribute]) -> In
                     InlineAttr::Always
                 } else if list_contains_name(&items[..], "never") {
                     InlineAttr::Never
+                } else if list_contains_name(&items[..], "semantic") {
+                    InlineAttr::Semantic
                 } else {
                     diagnostic.map(|d| {
                         span_err!(d, items[0].span, E0535, "invalid argument");
@@ -574,7 +577,7 @@ pub fn find_inline_attr(diagnostic: Option<&Handler>, attrs: &[Attribute]) -> In
 /// True if `#[inline]` or `#[inline(always)]` is present in `attrs`.
 pub fn requests_inline(attrs: &[Attribute]) -> bool {
     match find_inline_attr(None, attrs) {
-        InlineAttr::Hint | InlineAttr::Always => true,
+        InlineAttr::Hint | InlineAttr::Always | InlineAttr::Semantic => true,
         InlineAttr::None | InlineAttr::Never => false,
     }
 }

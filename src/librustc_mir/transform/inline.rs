@@ -20,12 +20,16 @@ use rustc::mir::transform::{MirPass, MirSource};
 use rustc::mir::visit::*;
 use rustc::ty::{self, Ty, TyCtxt};
 use rustc::ty::subst::{Subst,Substs};
+use rustc::middle::const_val::{ConstVal, ConstInt};
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use super::simplify::{remove_dead_blocks, CfgSimplifier};
 
 use syntax::{attr};
+use syntax::symbol::Symbol;
 use syntax::abi::Abi;
+use syntax_pos::{BytePos, Loc};
 
 const DEFAULT_THRESHOLD: usize = 50;
 const HINT_THRESHOLD: usize = 100;
@@ -35,7 +39,11 @@ const CALL_PENALTY: usize = 25;
 
 const UNKNOWN_SIZE_COST: usize = 10;
 
-pub struct Inline;
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Inline {
+    Normal,
+    Semantic,
+}
 
 #[derive(Copy, Clone)]
 struct CallSite<'tcx> {
@@ -50,15 +58,23 @@ impl MirPass for Inline {
                           tcx: TyCtxt<'a, 'tcx, 'tcx>,
                           source: MirSource,
                           mir: &mut Mir<'tcx>) {
-        if tcx.sess.opts.debugging_opts.mir_opt_level >= 2 {
-            Inliner { tcx, source }.run_pass(mir);
+        if *self == Inline::Semantic || tcx.sess.opts.debugging_opts.mir_opt_level >= 2 {
+            Inliner { tcx, source, pass: *self }.run_pass(mir);
         }
+    }
+
+    fn name(&self) -> Cow<str> {
+        Cow::Borrowed(match *self {
+            Inline::Normal => "Inline",
+            Inline::Semantic => "SemanticInline",
+        })
     }
 }
 
 struct Inliner<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx, 'tcx>,
     source: MirSource,
+    pass: Inline,
 }
 
 impl<'a, 'tcx> Inliner<'a, 'tcx> {
@@ -140,6 +156,14 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
                                     bb: bb,
                                     location: terminator.source_info
                                 });
+                            } else if self.pass == Inline::Semantic {
+                                self.tcx.sess
+                                    .struct_span_err(
+                                        self.tcx.def_span(callee_def_id),
+                                        "`#[inline(semantic)]` function cannot call itself."
+                                    )
+                                    .span_label(terminator.source_info.span, "recursion here")
+                                    .emit();
                             }
                         }
                     }
@@ -179,12 +203,16 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
         let attrs = tcx.get_attrs(callsite.callee);
         let hint = attr::find_inline_attr(None, &attrs[..]);
 
+        if self.pass == Inline::Semantic {
+            return hint == attr::InlineAttr::Semantic;
+        }
+
         let hinted = match hint {
             // Just treat inline(always) as a hint for now,
             // there are cases that prevent inlining that we
             // need to check for first.
             attr::InlineAttr::Always => true,
-            attr::InlineAttr::Never => return false,
+            attr::InlineAttr::Never | attr::InlineAttr::Semantic => return false,
             attr::InlineAttr::Hint => true,
             attr::InlineAttr::None => false,
         };
@@ -357,7 +385,17 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
                     local_map.push(idx);
                 }
 
-                for p in callee_mir.promoted.iter().cloned() {
+                if self.pass == Inline::Semantic {
+                    let mut caller_resolver = CallerResolver {
+                        tcx: self.tcx,
+                        caller_pos: callsite.location.span.lo,
+                        caller_loc: None,
+                        caller_file: None,
+                    };
+                    caller_resolver.visit_mir(&mut callee_mir);
+                }
+
+                for p in callee_mir.promoted.drain(..) {
                     let idx = caller_mir.promoted.push(p);
                     promoted_map.push(idx);
                 }
@@ -436,13 +474,11 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
                     local_map: local_map,
                     scope_map: scope_map,
                     promoted_map: promoted_map,
-                    _callsite: callsite,
                     destination: dest,
                     return_block: return_block,
                     cleanup_block: cleanup,
                     in_cleanup_block: false
                 };
-
 
                 for (bb, mut block) in callee_mir.basic_blocks_mut().drain_enumerated(..) {
                     integrator.visit_basic_block_data(bb, &mut block);
@@ -566,7 +602,6 @@ struct Integrator<'a, 'tcx: 'a> {
     local_map: IndexVec<Local, Local>,
     scope_map: IndexVec<VisibilityScope, VisibilityScope>,
     promoted_map: IndexVec<Promoted, Promoted>,
-    _callsite: CallSite<'tcx>,
     destination: Lvalue<'tcx>,
     return_block: BasicBlock,
     cleanup_block: Option<BasicBlock>,
@@ -717,5 +752,65 @@ impl<'a, 'tcx> MutVisitor<'tcx> for Integrator<'a, 'tcx> {
         } else {
             self.super_literal(literal, loc);
         }
+    }
+}
+
+
+struct CallerResolver<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx, 'tcx>,
+    caller_pos: BytePos,
+    caller_loc: Option<Loc>,
+    caller_file: Option<Symbol>,
+}
+
+impl<'a, 'tcx> CallerResolver<'a, 'tcx> {
+    fn caller_loc(&mut self) -> &Loc {
+        let tcx = self.tcx;
+        let caller_pos = self.caller_pos;
+        self.caller_loc.get_or_insert_with(|| tcx.sess.codemap().lookup_char_pos(caller_pos))
+    }
+
+    fn caller_file(&mut self) -> Symbol {
+        // Not using get_or_insert_with here, to avoid the lifetime restriction
+        // that forces us to clone the Rc<FileMap> in caller_loc().
+        if let Some(file) = self.caller_file {
+            return file;
+        }
+        let file = Symbol::intern(&self.caller_loc().file.name);
+        self.caller_file = Some(file);
+        file
+    }
+
+    fn callsite_info(&mut self, const_def_id: DefId) -> Option<ConstVal<'tcx>> {
+        if self.tcx.lang_items.caller_file() == Some(const_def_id) {
+            let file = self.caller_file();
+            Some(ConstVal::Str(file.as_str()))
+        } else if self.tcx.lang_items.caller_line() == Some(const_def_id) {
+            let line = self.caller_loc().line as u32;
+            Some(ConstVal::Integral(ConstInt::U32(line)))
+        } else if self.tcx.lang_items.caller_column() == Some(const_def_id) {
+            let column = self.caller_loc().col.0 as u32;
+            Some(ConstVal::Integral(ConstInt::U32(column)))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, 'tcx> MutVisitor<'tcx> for CallerResolver<'a, 'tcx> {
+    fn visit_mir(&mut self, mir: &mut Mir<'tcx>) {
+        for promoted in &mut mir.promoted {
+            self.visit_mir(promoted);
+        }
+        self.super_mir(mir);
+    }
+
+    fn visit_literal(&mut self, literal: &mut Literal<'tcx>, loc: Location) {
+        if let Literal::Item { def_id, .. } = *literal {
+            if let Some(value) = self.callsite_info(def_id) {
+                *literal = Literal::Value { value };
+            }
+        }
+        self.super_literal(literal, loc);
     }
 }

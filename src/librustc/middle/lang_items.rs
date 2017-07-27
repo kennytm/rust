@@ -335,7 +335,7 @@ language_item_table! {
 
     ExchangeMallocFnLangItem,        "exchange_malloc",         exchange_malloc_fn;
     BoxFreeFnLangItem,               "box_free",                box_free_fn;
-    DropInPlaceFnLangItem,             "drop_in_place",           drop_in_place_fn;
+    DropInPlaceFnLangItem,           "drop_in_place",           drop_in_place_fn;
 
     StartFnLangItem,                 "start",                   start_fn;
 
@@ -358,6 +358,10 @@ language_item_table! {
     NonZeroItem,                     "non_zero",                non_zero;
 
     DebugTraitLangItem,              "debug_trait",             debug_trait;
+
+    CallerFileConstLangItem,         "caller_file",             caller_file;
+    CallerLineConstLangItem,         "caller_line",             caller_line;
+    CallerColumnConstLangItem,       "caller_column",           caller_column;
 }
 
 impl<'a, 'tcx, 'gcx> ty::TyCtxt<'a, 'tcx, 'gcx> {
