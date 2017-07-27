@@ -545,6 +545,15 @@ impl Passes {
     }
 }
 
+bitflags! {
+    #[derive(Debug)]
+    flags LocationDetail: u8 {
+        const FILE = 1,
+        const LINE = 2,
+        const COLUMN = 4,
+    }
+}
+
 /// Declare a macro that will define all CodegenOptions/DebuggingOptions fields and parsers all
 /// at once. The goal of this macro is to define an interface that can be
 /// programmatically used by the option parser in order to initialize the struct
@@ -662,11 +671,13 @@ macro_rules! options {
             Some(::rustc_back::LinkerFlavor::one_of());
         pub const parse_optimization_fuel: Option<&'static str> =
             Some("crate=integer");
+        pub const parse_location_detail: Option<&'static str> =
+            Some("a space- or comma-separated list of `file`, `line`, `column`, `none` and `all`");
     }
 
     #[allow(dead_code)]
     mod $mod_set {
-        use super::{$struct_name, Passes, SomePasses, AllPasses, Sanitizer};
+        use super::{$struct_name, Passes, SomePasses, AllPasses, Sanitizer, LocationDetail};
         use rustc_back::{LinkerFlavor, PanicStrategy, RelroLevel};
 
         $(
@@ -833,6 +844,26 @@ macro_rules! options {
                     true
                 }
             }
+        }
+
+        fn parse_location_detail(slot: &mut LocationDetail, v: Option<&str>) -> bool {
+            *slot = if let Some(value) = v {
+                let mut enabled = LocationDetail::empty();
+                for string in value.split(&[',', ' '][..]) {
+                    enabled.insert(match string {
+                        "file" => LocationDetail::FILE,
+                        "line" => LocationDetail::LINE,
+                        "column" => LocationDetail::COLUMN,
+                        "all" => LocationDetail::all(),
+                        "none" => LocationDetail::empty(),
+                        _ => return false,
+                    });
+                }
+                enabled
+            } else {
+                LocationDetail::all()
+            };
+            true
         }
     }
 ) }
@@ -1070,6 +1101,8 @@ options! {DebuggingOptions, DebuggingSetter, basic_debugging_options,
                  "run the non-lexical lifetimes MIR pass"),
     trans_time_graph: bool = (false, parse_bool, [UNTRACKED],
         "generate a graphical HTML report of time spent in trans and LLVM"),
+    location_detail: LocationDetail = (LocationDetail::all(), parse_location_detail, [TRACKED],
+        "how much detail about the source location to display on panic"),
 }
 
 pub fn default_lib_output() -> CrateType {
@@ -1825,7 +1858,7 @@ mod dep_tracking {
     use std::path::PathBuf;
     use std::collections::hash_map::DefaultHasher;
     use super::{Passes, CrateType, OptLevel, DebugInfoLevel,
-                OutputTypes, Externs, ErrorOutputType, Sanitizer};
+                OutputTypes, Externs, ErrorOutputType, Sanitizer, LocationDetail};
     use syntax::feature_gate::UnstableFeatures;
     use rustc_back::{PanicStrategy, RelroLevel};
 
@@ -1885,6 +1918,7 @@ mod dep_tracking {
     impl_dep_tracking_hash_via_hash!(cstore::NativeLibraryKind);
     impl_dep_tracking_hash_via_hash!(Sanitizer);
     impl_dep_tracking_hash_via_hash!(Option<Sanitizer>);
+    impl_dep_tracking_hash_via_hash!(LocationDetail);
 
     impl_dep_tracking_hash_for_sortable_vec_of!(String);
     impl_dep_tracking_hash_for_sortable_vec_of!(CrateType);

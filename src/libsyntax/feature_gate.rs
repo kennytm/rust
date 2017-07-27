@@ -379,6 +379,9 @@ declare_features! (
 
     // allow `#[must_use]` on functions (RFC 1940)
     (active, fn_must_use, "1.21.0", Some(43302)),
+
+    // #[implicit_caller_location] attribute
+    (active, implicit_caller_location, "1.22.0", Some(99999)),
 );
 
 declare_features! (
@@ -876,6 +879,15 @@ pub const BUILTIN_ATTRIBUTES: &'static [(&'static str, AttributeType, AttributeG
     ("no_builtins", CrateLevel, Ungated),
     ("recursion_limit", CrateLevel, Ungated),
     ("type_length_limit", CrateLevel, Ungated),
+
+    // #[implicit_caller_location] itself is a proc-macro. It will expand to
+    // this attribute after the AST transformation.
+    ("rustc_implicit_caller_location", Whitelisted, Gated(
+        Stability::Unstable,
+        "rustc_attrs",
+        "used internally by rustc",
+        cfg_fn!(rustc_attrs),
+    )),
 ];
 
 // cfg(...)'s that are feature gated

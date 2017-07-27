@@ -765,12 +765,10 @@ impl<T, E: fmt::Debug> Result<T, E> {
     /// x.unwrap(); // panics with `emergency failure`
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap(self) -> T {
-        match self {
-            Ok(t) => t,
-            Err(e) => unwrap_failed("called `Result::unwrap()` on an `Err` value", e),
-        }
+        self.expect("called `Result::unwrap()` on an `Err` value")
     }
 
     /// Unwraps a result, yielding the content of an [`Ok`].
@@ -792,6 +790,7 @@ impl<T, E: fmt::Debug> Result<T, E> {
     /// x.expect("Testing expect"); // panics with `Testing expect: emergency failure`
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "result_expect", since = "1.4.0")]
     pub fn expect(self, msg: &str) -> T {
         match self {
@@ -825,12 +824,10 @@ impl<T: fmt::Debug, E> Result<T, E> {
     /// assert_eq!(x.unwrap_err(), "emergency failure");
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap_err(self) -> E {
-        match self {
-            Ok(t) => unwrap_failed("called `Result::unwrap_err()` on an `Ok` value", t),
-            Err(e) => e,
-        }
+        self.expect_err("called `Result::unwrap_err()` on an `Ok` value")
     }
 
     /// Unwraps a result, yielding the content of an [`Err`].
@@ -852,6 +849,7 @@ impl<T: fmt::Debug, E> Result<T, E> {
     /// x.expect_err("Testing expect_err"); // panics with `Testing expect_err: 10`
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "result_expect_err", since = "1.17.0")]
     pub fn expect_err(self, msg: &str) -> E {
         match self {
@@ -899,10 +897,11 @@ impl<T: Default, E> Result<T, E> {
     }
 }
 
-// This is a separate function to reduce the code size of the methods
-#[inline(never)]
+// FIXME(RFC2091): The MIR inliner does not handle diverging call, so this
+// function is changed from returning ! to returning anything.
 #[cold]
-fn unwrap_failed<E: fmt::Debug>(msg: &str, error: E) -> ! {
+#[cfg_attr(not(stage0), implicit_caller_location)]
+fn unwrap_failed<E: fmt::Debug, T>(msg: &str, error: E) -> T {
     panic!("{}: {:?}", msg, error)
 }
 

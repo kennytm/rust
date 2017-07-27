@@ -35,6 +35,7 @@ mod format_foreign;
 mod global_asm;
 mod log_syntax;
 mod trace_macros;
+mod implicit_caller_location;
 
 pub mod proc_macro_registrar;
 
@@ -45,7 +46,7 @@ pub mod proc_macro_impl;
 
 use std::rc::Rc;
 use syntax::ast;
-use syntax::ext::base::{MacroExpanderFn, NormalTT, NamedSyntaxExtension};
+use syntax::ext::base::{MacroExpanderFn, NormalTT, SyntaxExtension, NamedSyntaxExtension};
 use syntax::symbol::Symbol;
 
 pub fn register_builtins(resolver: &mut syntax::ext::base::Resolver,
@@ -119,6 +120,11 @@ pub fn register_builtins(resolver: &mut syntax::ext::base::Resolver,
                 allow_internal_unstable: true,
                 allow_internal_unsafe: false,
             });
+
+    register(
+        Symbol::intern("implicit_caller_location"),
+        SyntaxExtension::AttrProcMacro(Box::new(implicit_caller_location::Expand)),
+    );
 
     for (name, ext) in user_exts {
         register(name, ext);

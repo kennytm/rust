@@ -66,6 +66,17 @@ impl<'a> CheckAttrVisitor<'a> {
         }
     }
 
+    /// Checks if an `#[implicit_caller_location]` attribute is *not* applied to a trait.
+    fn check_implicit_caller_location_in_trait(&self, attrs: &[ast::Attribute]) {
+        let attr = attrs.iter().filter(|ia| ia.path == "rustc_implicit_caller_location").next();
+        if let Some(attr) = attr {
+            self.sess.span_err(
+                attr.span,
+                "`#[implicit_caller_location]` is not supported for trait items yet",
+            );
+        }
+    }
+
     /// Check if an `#[repr]` attr is valid.
     fn check_repr(&self, attr: &ast::Attribute, target: Target) {
         let words = match attr.meta_item_list() {
@@ -155,6 +166,26 @@ impl<'a> Visitor<'a> for CheckAttrVisitor<'a> {
         for attr in &item.attrs {
             self.check_attribute(attr, target);
         }
+
+        // Disallow #[implicit_caller_location], since it is not yet supported.
+        match item.node {
+            ast::ItemKind::Trait(_, _, _, ref trait_items) => {
+                for trait_item in trait_items {
+                    if let ast::TraitItemKind::Method(..) = trait_item.node {
+                        self.check_implicit_caller_location_in_trait(&trait_item.attrs);
+                    }
+                }
+            }
+            ast::ItemKind::Impl(_, _, _, _, Some(_), _, ref impl_items) => {
+                for impl_item in impl_items {
+                    if let ast::ImplItemKind::Method(..) = impl_item.node {
+                        self.check_implicit_caller_location_in_trait(&impl_item.attrs);
+                    }
+                }
+            }
+            _ => {}
+        }
+
         visit::walk_item(self, item);
     }
 }

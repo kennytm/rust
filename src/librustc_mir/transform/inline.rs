@@ -18,9 +18,11 @@ use rustc_data_structures::indexed_vec::{Idx, IndexVec};
 use rustc::mir::*;
 use rustc::mir::transform::{MirPass, MirSource};
 use rustc::mir::visit::*;
+use rustc::mir::implicit_caller_location::*;
 use rustc::ty::{self, Ty, TyCtxt};
 use rustc::ty::subst::{Subst,Substs};
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use super::simplify::{remove_dead_blocks, CfgSimplifier};
 
@@ -35,7 +37,12 @@ const CALL_PENALTY: usize = 25;
 
 const UNKNOWN_SIZE_COST: usize = 10;
 
-pub struct Inline;
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Inline {
+    Normal,
+    ImplicitCallerLocation,
+    //^ FIXME(RFC2091): Identify essential routines and split this into its own pass.
+}
 
 #[derive(Copy, Clone)]
 struct CallSite<'tcx> {
@@ -50,15 +57,25 @@ impl MirPass for Inline {
                           tcx: TyCtxt<'a, 'tcx, 'tcx>,
                           source: MirSource,
                           mir: &mut Mir<'tcx>) {
-        if tcx.sess.opts.debugging_opts.mir_opt_level >= 2 {
-            Inliner { tcx, source }.run_pass(mir);
+        if *self == Inline::ImplicitCallerLocation ||
+            tcx.sess.opts.debugging_opts.mir_opt_level >= 2
+        {
+            Inliner { tcx, source, pass: *self }.run_pass(mir);
         }
+    }
+
+    fn name(&self) -> Cow<str> {
+        Cow::Borrowed(match *self {
+            Inline::Normal => "Inline",
+            Inline::ImplicitCallerLocation => "ImplicitCallerLocation-Redirect",
+        })
     }
 }
 
 struct Inliner<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx, 'tcx>,
     source: MirSource,
+    pass: Inline,
 }
 
 impl<'a, 'tcx> Inliner<'a, 'tcx> {
@@ -76,6 +93,15 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
         // file. =)
 
         let mut callsites = VecDeque::new();
+
+        // Do not do any transformation if the function itself is #[rustc_implicit_caller_location]
+        // (leave it until trans)
+        let node_id = self.source.item_id();
+        if is_implicit_caller_location_fn(self.tcx, node_id) {
+            return;
+        }
+
+        let is_icl_closure = is_implicit_caller_location_closure(self.tcx, node_id);
 
         // Only do inlining into fn bodies.
         if let MirSource::Fn(_) = self.source {
@@ -106,6 +132,19 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
             local_change = false;
             while let Some(callsite) = callsites.pop_front() {
                 if !self.tcx.is_mir_available(callsite.callee) {
+                    if self.pass == Inline::ImplicitCallerLocation &&
+                        is_caller_location_intrinsic(self.tcx, callsite.callee)
+                    {
+                        let rvalue = if is_icl_closure {
+                            let local = Local::new(caller_mir.arg_count);
+                            Rvalue::Use(Operand::Consume(Lvalue::Local(local)))
+                        } else {
+                            location_rvalue(self.tcx, callsite.location.span)
+                        };
+                        replace_caller_location(self.tcx, &mut caller_mir[callsite.bb], rvalue);
+                        local_change = true;
+                        changed = true;
+                    }
                     continue;
                 }
 
@@ -143,7 +182,11 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
                                     callee: callee_def_id,
                                     substs,
                                     bb,
-                                    location: terminator.source_info
+                                    location: if self.pass == Inline::ImplicitCallerLocation {
+                                        callsite.location
+                                    } else {
+                                        terminator.source_info
+                                    },
                                 });
                             }
                         }
@@ -186,7 +229,11 @@ impl<'a, 'tcx> Inliner<'a, 'tcx> {
         }
 
         let attrs = tcx.get_attrs(callsite.callee);
-        let hint = attr::find_inline_attr(None, &attrs[..]);
+        if self.pass == Inline::ImplicitCallerLocation {
+            return attr::contains_name(&attrs, "rustc_implicit_caller_location");
+        }
+
+        let hint = attr::find_inline_attr(None, &attrs);
 
         let hinted = match hint {
             // Just treat inline(always) as a hint for now,

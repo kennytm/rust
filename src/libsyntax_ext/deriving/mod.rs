@@ -152,11 +152,12 @@ fn hygienic_type_parameter(item: &Annotatable, base: &str) -> String {
 }
 
 /// Constructs an expression that calls an intrinsic
-fn call_intrinsic(cx: &ExtCtxt,
-                  mut span: Span,
-                  intrinsic: &str,
-                  args: Vec<P<ast::Expr>>)
-                  -> P<ast::Expr> {
+pub(crate) fn call_intrinsic(
+    cx: &ExtCtxt,
+    mut span: Span,
+    intrinsic: &str,
+    args: Vec<P<ast::Expr>>,
+) -> P<ast::Expr> {
     if cx.current_expansion.mark.expn_info().unwrap().callee.allow_internal_unstable {
         span = span.with_ctxt(cx.backtrace());
     } else { // Avoid instability errors with user defined curstom derives, cc #36316

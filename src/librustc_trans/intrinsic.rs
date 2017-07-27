@@ -29,6 +29,7 @@ use rustc::hir;
 use syntax::ast;
 use syntax::symbol::Symbol;
 use builder::Builder;
+use rustc::mir::implicit_caller_location::location_tuple;
 
 use rustc::session::Session;
 use syntax_pos::Span;
@@ -395,6 +396,21 @@ pub fn trans_intrinsic_call<'a, 'tcx>(bcx: &Builder<'a, 'tcx>,
             // `if offset == 0 { 0 } else { offset - align }`
             bcx.select(is_zero, zero, bcx.sub(offset, llargs[1]))
         }
+
+        "caller_location" => {
+            // FIXME: Consider adding a lint here.
+            let (file, line, column) = location_tuple(tcx, span);
+            let padding = C_undef(Type::array(&Type::i8(ccx), 0)); // not sure why this is needed.
+            C_named_struct(llret_ty, &[
+                C_str_slice(ccx, file.as_str()),
+                padding,
+                C_u32(ccx, line),
+                padding,
+                C_u32(ccx, column),
+                padding,
+            ])
+        }
+
         name if name.starts_with("simd_") => {
             generic_simd_intrinsic(bcx, name,
                                    callee_ty,

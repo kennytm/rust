@@ -27,18 +27,13 @@ macro_rules! panic {
         panic!("explicit panic")
     );
     ($msg:expr) => ({
-        static _MSG_FILE_LINE_COL: (&'static str, &'static str, u32, u32) =
-            ($msg, file!(), line!(), __rust_unstable_column!());
-        $crate::panicking::panic(&_MSG_FILE_LINE_COL)
+        let loc = $crate::panicking::Location::caller();
+        $crate::panicking::panic(&($msg, loc.file(), loc.line(), loc.column()))
     });
     ($fmt:expr, $($arg:tt)*) => ({
-        // The leading _'s are to avoid dead code warnings if this is
-        // used inside a dead function. Just `#[allow(dead_code)]` is
-        // insufficient, since the user may have
-        // `#[forbid(dead_code)]` and which cannot be overridden.
-        static _MSG_FILE_LINE_COL: (&'static str, u32, u32) =
-            (file!(), line!(), __rust_unstable_column!());
-        $crate::panicking::panic_fmt(format_args!($fmt, $($arg)*), &_MSG_FILE_LINE_COL)
+        let loc = $crate::panicking::Location::caller();
+        let loc = &(loc.file(), loc.line(), loc.column());
+        $crate::panicking::panic_fmt(format_args!($fmt, $($arg)*), loc)
     });
 }
 

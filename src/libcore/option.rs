@@ -295,11 +295,12 @@ impl<T> Option<T> {
     /// x.expect("the world is ending"); // panics with `the world is ending`
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn expect(self, msg: &str) -> T {
         match self {
             Some(val) => val,
-            None => expect_failed(msg),
+            None => panic!(msg),
         }
     }
 
@@ -328,12 +329,10 @@ impl<T> Option<T> {
     /// assert_eq!(x.unwrap(), "air"); // fails
     /// ```
     #[inline]
+    #[cfg_attr(not(stage0), implicit_caller_location)]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap(self) -> T {
-        match self {
-            Some(val) => val,
-            None => panic!("called `Option::unwrap()` on a `None` value"),
-        }
+        self.expect("called `Option::unwrap()` on a `None` value")
     }
 
     /// Returns the contained value or a default.
@@ -831,14 +830,6 @@ impl<T: Default> Option<T> {
         }
     }
 }
-
-// This is a separate function to reduce the code size of .expect() itself.
-#[inline(never)]
-#[cold]
-fn expect_failed(msg: &str) -> ! {
-    panic!("{}", msg)
-}
-
 
 /////////////////////////////////////////////////////////////////////////////
 // Trait implementations

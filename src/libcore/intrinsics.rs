@@ -1378,6 +1378,10 @@ extern "rust-intrinsic" {
     /// ```
     #[cfg(not(stage0))]
     pub fn align_offset(ptr: *const (), align: usize) -> usize;
+
+    /// FIXME(RFC2091): Description.
+    #[cfg(not(stage0))]
+    pub fn caller_location() -> ::panicking::Location<'static>;
 }
 
 #[cfg(stage0)]
@@ -1420,4 +1424,9 @@ pub unsafe fn align_offset(ptr: *const (), align: usize) -> usize {
     } else {
         align - offset
     }
+}
+
+#[cfg(stage0)]
+pub fn caller_location() -> ::panicking::Location<'static> {
+    ::panicking::Location::caller()
 }

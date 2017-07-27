@@ -40,7 +40,7 @@ use fmt;
 
 #[cold] #[inline(never)] // this is the slow path, always
 #[lang = "panic"]
-pub fn panic(expr_file_line_col: &(&'static str, &'static str, u32, u32)) -> ! {
+pub fn panic(expr_file_line_col: &(&str, &'static str, u32, u32)) -> ! {
     // Use Arguments::new_v1 instead of format_args!("{}", expr) to potentially
     // reduce size overhead. The format_args! macro uses str's Display trait to
     // write expr, which calls Formatter::pad, which must accommodate string
@@ -69,4 +69,139 @@ pub fn panic_fmt(fmt: fmt::Arguments, file_line_col: &(&'static str, u32, u32)) 
     }
     let (file, line, col) = *file_line_col;
     unsafe { panic_impl(fmt, file, line, col) }
+}
+
+/// A struct containing information about the location of a panic.
+///
+/// This structure is created by the [`location`] method of [`PanicInfo`].
+///
+/// [`location`]: ../../std/panic/struct.PanicInfo.html#method.location
+/// [`PanicInfo`]: ../../std/panic/struct.PanicInfo.html
+///
+/// # Examples
+///
+/// ```should_panic
+/// use std::panic;
+///
+/// panic::set_hook(Box::new(|panic_info| {
+///     if let Some(location) = panic_info.location() {
+///         println!("panic occured in file '{}' at line {}", location.file(), location.line());
+///     } else {
+///         println!("panic occured but can't get location information...");
+///     }
+/// }));
+///
+/// panic!("Normal panic");
+/// ```
+#[cfg_attr(not(stage0), lang = "location")]
+#[derive(Clone, Debug)]
+#[stable(feature = "panic_hooks", since = "1.10.0")]
+pub struct Location<'a> {
+    // Note: If you change the content of order of this structure, please change
+    // the following two places to match:
+    //  * `location_rvalue()` at ``
+    // please change `src/librustc_mir/transform/implicit_location.rs` as well.
+    file: &'a str,
+    line: u32,
+    col: u32,
+}
+
+impl<'a> Location<'a> {
+    /// Returns the name of the source file from which the panic originated.
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// use std::panic;
+    ///
+    /// panic::set_hook(Box::new(|panic_info| {
+    ///     if let Some(location) = panic_info.location() {
+    ///         println!("panic occured in file '{}'", location.file());
+    ///     } else {
+    ///         println!("panic occured but can't get location information...");
+    ///     }
+    /// }));
+    ///
+    /// panic!("Normal panic");
+    /// ```
+    #[stable(feature = "panic_hooks", since = "1.10.0")]
+    pub fn file(&self) -> &'a str {
+        self.file
+    }
+
+    /// Returns the line number from which the panic originated.
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// use std::panic;
+    ///
+    /// panic::set_hook(Box::new(|panic_info| {
+    ///     if let Some(location) = panic_info.location() {
+    ///         println!("panic occured at line {}", location.line());
+    ///     } else {
+    ///         println!("panic occured but can't get location information...");
+    ///     }
+    /// }));
+    ///
+    /// panic!("Normal panic");
+    /// ```
+    #[stable(feature = "panic_hooks", since = "1.10.0")]
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+
+    /// Returns the column from which the panic originated.
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// #![feature(panic_col)]
+    /// use std::panic;
+    ///
+    /// panic::set_hook(Box::new(|panic_info| {
+    ///     if let Some(location) = panic_info.location() {
+    ///         println!("panic occured at column {}", location.column());
+    ///     } else {
+    ///         println!("panic occured but can't get location information...");
+    ///     }
+    /// }));
+    ///
+    /// panic!("Normal panic");
+    /// ```
+    #[unstable(feature = "panic_col", reason = "recently added", issue = "42939")]
+    pub fn column(&self) -> u32 {
+        self.col
+    }
+
+    /// Creates a new location at the given file, line and column.
+    #[unstable(feature = "panic_new", reason = "recently added", issue = "99999")]
+    pub fn new(file: &'a str, line: u32, col: u32) -> Location<'a> {
+        Location { file, line, col }
+    }
+
+    #[cfg(stage0)]
+    #[unstable(feature = "caller_location", reason = "recently added", issue = "99999")]
+    pub fn caller() -> Location<'static> {
+        Location {
+            file: file!(),
+            line: line!(),
+            col: column!(),
+        }
+    }
+
+    /// Obtains the caller's source location.
+    ///
+    /// User is able to configure the detail of the source location via the
+    /// unstable `-Z location-details` rustc option. It is possible that the
+    /// returned location is all zero. Therefore, the location is mostly only
+    /// suitable for logging.
+    #[cfg(not(stage0))]
+    #[unstable(feature = "caller_location", reason = "recently added", issue = "99999")]
+    #[implicit_caller_location]
+    pub fn caller() -> Location<'static> {
+        unsafe {
+            ::intrinsics::caller_location()
+        }
+    }
 }

@@ -314,6 +314,8 @@
 #![feature(vec_push_all)]
 #![feature(doc_cfg)]
 #![cfg_attr(test, feature(update_panic_count))]
+#![feature(panic_col)]
+#![feature(panic_new)]
 
 #![default_lib_allocator]
 

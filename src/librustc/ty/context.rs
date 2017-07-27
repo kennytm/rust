@@ -1650,6 +1650,14 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         self.mk_imm_ref(self.types.re_static, self.mk_str())
     }
 
+    /// Creates the type for `core::panicking::Location<'static>`.
+    pub fn mk_location_ty(self) -> Ty<'tcx> {
+        let def = self.require_lang_item(lang_items::LocationTypeLangItem);
+        let adt = self.adt_def(def);
+        let substs = self.mk_substs(iter::once(Kind::from(self.types.re_static)));
+        self.mk_ty(ty::TyAdt(adt, substs))
+    }
+
     pub fn mk_adt(self, def: &'tcx AdtDef, substs: &'tcx Substs<'tcx>) -> Ty<'tcx> {
         // take a copy of substs so that we own the vectors inside
         self.mk_ty(TyAdt(def, substs))

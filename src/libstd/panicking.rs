@@ -32,6 +32,8 @@ use sys_common::thread_info;
 use sys_common::util;
 use thread;
 
+use core::panicking::Location;
+
 thread_local! {
     pub static LOCAL_STDERR: RefCell<Option<Box<Write + Send>>> = {
         RefCell::new(None)
@@ -236,105 +238,6 @@ impl<'a> PanicInfo<'a> {
     }
 }
 
-/// A struct containing information about the location of a panic.
-///
-/// This structure is created by the [`location`] method of [`PanicInfo`].
-///
-/// [`location`]: ../../std/panic/struct.PanicInfo.html#method.location
-/// [`PanicInfo`]: ../../std/panic/struct.PanicInfo.html
-///
-/// # Examples
-///
-/// ```should_panic
-/// use std::panic;
-///
-/// panic::set_hook(Box::new(|panic_info| {
-///     if let Some(location) = panic_info.location() {
-///         println!("panic occurred in file '{}' at line {}", location.file(), location.line());
-///     } else {
-///         println!("panic occurred but can't get location information...");
-///     }
-/// }));
-///
-/// panic!("Normal panic");
-/// ```
-#[derive(Debug)]
-#[stable(feature = "panic_hooks", since = "1.10.0")]
-pub struct Location<'a> {
-    file: &'a str,
-    line: u32,
-    col: u32,
-}
-
-impl<'a> Location<'a> {
-    /// Returns the name of the source file from which the panic originated.
-    ///
-    /// # Examples
-    ///
-    /// ```should_panic
-    /// use std::panic;
-    ///
-    /// panic::set_hook(Box::new(|panic_info| {
-    ///     if let Some(location) = panic_info.location() {
-    ///         println!("panic occurred in file '{}'", location.file());
-    ///     } else {
-    ///         println!("panic occurred but can't get location information...");
-    ///     }
-    /// }));
-    ///
-    /// panic!("Normal panic");
-    /// ```
-    #[stable(feature = "panic_hooks", since = "1.10.0")]
-    pub fn file(&self) -> &str {
-        self.file
-    }
-
-    /// Returns the line number from which the panic originated.
-    ///
-    /// # Examples
-    ///
-    /// ```should_panic
-    /// use std::panic;
-    ///
-    /// panic::set_hook(Box::new(|panic_info| {
-    ///     if let Some(location) = panic_info.location() {
-    ///         println!("panic occurred at line {}", location.line());
-    ///     } else {
-    ///         println!("panic occurred but can't get location information...");
-    ///     }
-    /// }));
-    ///
-    /// panic!("Normal panic");
-    /// ```
-    #[stable(feature = "panic_hooks", since = "1.10.0")]
-    pub fn line(&self) -> u32 {
-        self.line
-    }
-
-    /// Returns the column from which the panic originated.
-    ///
-    /// # Examples
-    ///
-    /// ```should_panic
-    /// #![feature(panic_col)]
-    /// use std::panic;
-    ///
-    /// panic::set_hook(Box::new(|panic_info| {
-    ///     if let Some(location) = panic_info.location() {
-    ///         println!("panic occurred at column {}", location.column());
-    ///     } else {
-    ///         println!("panic occurred but can't get location information...");
-    ///     }
-    /// }));
-    ///
-    /// panic!("Normal panic");
-    /// ```
-    #[unstable(feature = "panic_col", reason = "recently added", issue = "42939")]
-    pub fn column(&self) -> u32 {
-        self.col
-    }
-}
-
 fn default_hook(info: &PanicInfo) {
     #[cfg(feature = "backtrace")]
     use sys_common::backtrace;
@@ -352,9 +255,9 @@ fn default_hook(info: &PanicInfo) {
         }
     };
 
-    let file = info.location.file;
-    let line = info.location.line;
-    let col = info.location.col;
+    let file = info.location.file();
+    let line = info.location.line();
+    let col = info.location.column();
 
     let msg = match info.payload.downcast_ref::<&'static str>() {
         Some(s) => *s,
@@ -600,11 +503,7 @@ fn rust_panic_with_hook(msg: Box<Any + Send>,
     unsafe {
         let info = PanicInfo {
             payload: &*msg,
-            location: Location {
-                file,
-                line,
-                col,
-            },
+            location: Location::new(file, line, col),
         };
         HOOK_LOCK.read();
         match HOOK {

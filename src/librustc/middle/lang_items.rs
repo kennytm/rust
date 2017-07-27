@@ -339,7 +339,7 @@ language_item_table! {
 
     ExchangeMallocFnLangItem,        "exchange_malloc",         exchange_malloc_fn;
     BoxFreeFnLangItem,               "box_free",                box_free_fn;
-    DropInPlaceFnLangItem,             "drop_in_place",           drop_in_place_fn;
+    DropInPlaceFnLangItem,           "drop_in_place",           drop_in_place_fn;
 
     StartFnLangItem,                 "start",                   start_fn;
 
@@ -362,6 +362,8 @@ language_item_table! {
     NonZeroItem,                     "non_zero",                non_zero;
 
     DebugTraitLangItem,              "debug_trait",             debug_trait;
+
+    LocationTypeLangItem,            "location",                location_ty;
 }
 
 impl<'a, 'tcx, 'gcx> ty::TyCtxt<'a, 'tcx, 'gcx> {

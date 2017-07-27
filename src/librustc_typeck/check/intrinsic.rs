@@ -318,6 +318,8 @@ pub fn check_intrinsic_type<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                 (0, vec![ptr_ty, tcx.types.usize], tcx.types.usize)
             },
 
+            "caller_location" => (0, Vec::new(), tcx.mk_location_ty()),
+
             ref other => {
                 struct_span_err!(tcx.sess, it.span, E0093,
                                 "unrecognized intrinsic function: `{}`",
