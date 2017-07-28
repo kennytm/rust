@@ -331,7 +331,8 @@ use prelude::v1::*;
 // imported by the compiler (via our #[no_std] attribute) In this case we just
 // add a new crate name so we can attach the reexports to it.
 #[macro_reexport(assert, assert_eq, assert_ne, debug_assert, debug_assert_eq,
-                 debug_assert_ne, unreachable, unimplemented, write, writeln, try)]
+                 debug_assert_ne, unreachable, unimplemented, write, writeln, try,
+                 caller_location, panic_at_source_location)]
 extern crate core as __core;
 
 #[allow(deprecated)] extern crate rand as core_rand;

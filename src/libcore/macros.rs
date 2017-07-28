@@ -32,6 +32,31 @@ macro_rules! panic {
     });
 }
 
+/// FIXME: Document
+#[macro_export]
+#[allow_internal_unstable]
+#[unstable(feature = "caller_location", issue = "99999")]
+macro_rules! panic_at_source_location {
+    ($location:expr) => (
+        panic_at_source_location!($location, "explicit panic")
+    );
+    ($location:expr, $msg:expr) => ({
+        let location = $location;
+        $crate::panicking::panic(&($msg, location.0, location.1, location.2))
+    });
+    ($location:expr, $fmt:expr, $($arg:tt)*) => ({
+        $crate::panicking::panic_fmt(format_args!($fmt, $($arg)*), &$location)
+    });
+}
+
+/// FIXME: Document
+#[macro_export]
+#[allow_internal_unstable]
+#[unstable(feature = "caller_location", issue = "99999")]
+macro_rules! caller_location {
+    () => (&($crate::caller::FILE, $crate::caller::LINE, $crate::caller::COLUMN))
+}
+
 /// Ensure that a boolean expression is `true` at runtime.
 ///
 /// This will invoke the [`panic!`] macro if the provided expression cannot be

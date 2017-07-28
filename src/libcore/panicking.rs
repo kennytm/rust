@@ -40,7 +40,7 @@ use fmt;
 
 #[cold] #[inline(never)] // this is the slow path, always
 #[lang = "panic"]
-pub fn panic(expr_file_line_col: &(&'static str, &'static str, u32, u32)) -> ! {
+pub fn panic(expr_file_line_col: &(&str, &'static str, u32, u32)) -> ! {
     // Use Arguments::new_v1 instead of format_args!("{}", expr) to potentially
     // reduce size overhead. The format_args! macro uses str's Display trait to
     // write expr, which calls Formatter::pad, which must accommodate string

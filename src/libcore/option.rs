@@ -294,12 +294,38 @@ impl<T> Option<T> {
     /// let x: Option<&str> = None;
     /// x.expect("the world is ending"); // panics with `the world is ending`
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn expect(self, msg: &str) -> T {
+        self.expect_at_source_location(caller_location!(), msg)
+    }
+
+    /// Unwraps an option, yielding the content of a [`Some`].
+    ///
+    /// This method overrides the source location where the panic reports.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the value is a [`None`] with a custom panic message provided by
+    /// `msg`.
+    ///
+    /// [`Some`]: #variant.Some
+    /// [`None`]: #variant.None
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// let x: Option<&str> = None;
+    /// x.expect_at_source_location(&("doomsday.rs", 123, 45), "the world is ending");
+    //  // panics with `the world is ending` at `doomsday.rs:123:45`.
+    /// ```
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn expect_at_source_location(self, location: &(&'static str, u32, u32), msg: &str) -> T {
         match self {
             Some(val) => val,
-            None => expect_failed(msg),
+            None => panic_at_source_location!(location, msg),
         }
     }
 
@@ -327,13 +353,35 @@ impl<T> Option<T> {
     /// let x: Option<&str> = None;
     /// assert_eq!(x.unwrap(), "air"); // fails
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap(self) -> T {
-        match self {
-            Some(val) => val,
-            None => panic!("called `Option::unwrap()` on a `None` value"),
-        }
+        self.unwrap_at_source_location(caller_location!())
+    }
+
+    /// Moves the value `v` out of the `Option<T>` if it is [`Some(v)`].
+    ///
+    /// This method overrides the source location where the panic reports.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the self value equals [`None`].
+    ///
+    /// [`Some(v)`]: #variant.Some
+    /// [`None`]: #variant.None
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// let x: Option<&str> = None;
+    /// assert_eq!(x.unwrap_at_source_location("space.rs", 690, 1), "air");
+    /// // fails at `space.rs:690:1`.
+    /// ```
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn unwrap_at_source_location(self, location: &(&'static str, u32, u32)) -> T {
+        self.expect_at_source_location(location, "called `Option::unwrap()` on a `None` value")
     }
 
     /// Returns the contained value or a default.
@@ -811,14 +859,6 @@ impl<T: Default> Option<T> {
         }
     }
 }
-
-// This is a separate function to reduce the code size of .expect() itself.
-#[inline(never)]
-#[cold]
-fn expect_failed(msg: &str) -> ! {
-    panic!("{}", msg)
-}
-
 
 /////////////////////////////////////////////////////////////////////////////
 // Trait implementations

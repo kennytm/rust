@@ -730,13 +730,18 @@ impl<T, E: fmt::Debug> Result<T, E> {
     /// let x: Result<u32, &str> = Err("emergency failure");
     /// x.unwrap(); // panics with `emergency failure`
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap(self) -> T {
-        match self {
-            Ok(t) => t,
-            Err(e) => unwrap_failed("called `Result::unwrap()` on an `Err` value", e),
-        }
+        self.unwrap_at_source_location(caller_location!())
+    }
+
+    /// FIXME: Document.
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn unwrap_at_source_location(self, location: &(&'static str, u32, u32)) -> T {
+        self.expect_at_source_location(location, "called `Result::unwrap()` on an `Err` value")
     }
 
     /// Unwraps a result, yielding the content of an `Ok`.
@@ -754,12 +759,20 @@ impl<T, E: fmt::Debug> Result<T, E> {
     /// let x: Result<u32, &str> = Err("emergency failure");
     /// x.expect("Testing expect"); // panics with `Testing expect: emergency failure`
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "result_expect", since = "1.4.0")]
     pub fn expect(self, msg: &str) -> T {
+        self.expect_at_source_location(caller_location!(), msg)
+    }
+
+    /// FIXME: Document.
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn expect_at_source_location(self, location: &(&'static str, u32, u32), msg: &str) -> T {
         match self {
             Ok(t) => t,
-            Err(e) => unwrap_failed(msg, e),
+            Err(e) => unwrap_failed(msg, e, location),
         }
     }
 }
@@ -783,13 +796,21 @@ impl<T: fmt::Debug, E> Result<T, E> {
     /// let x: Result<u32, &str> = Err("emergency failure");
     /// assert_eq!(x.unwrap_err(), "emergency failure");
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn unwrap_err(self) -> E {
-        match self {
-            Ok(t) => unwrap_failed("called `Result::unwrap_err()` on an `Ok` value", t),
-            Err(e) => e,
-        }
+        self.unwrap_err_at_source_location(caller_location!())
+    }
+
+    /// FIXME: Document.
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn unwrap_err_at_source_location(self, location: &(&'static str, u32, u32)) -> E {
+        self.expect_err_at_source_location(
+            location,
+            "called `Result::unwrap_err()` on an `Ok` value",
+        )
     }
 
     /// Unwraps a result, yielding the content of an `Err`.
@@ -807,11 +828,19 @@ impl<T: fmt::Debug, E> Result<T, E> {
     /// let x: Result<u32, &str> = Ok(10);
     /// x.expect_err("Testing expect_err"); // panics with `Testing expect_err: 10`
     /// ```
-    #[inline]
+    #[cfg_attr(stage0, inline)]
+    #[cfg_attr(not(stage0), inline(semantic))]
     #[stable(feature = "result_expect_err", since = "1.17.0")]
     pub fn expect_err(self, msg: &str) -> E {
+        self.expect_err_at_source_location(caller_location!(), msg)
+    }
+
+    /// FIXME: Document.
+    #[inline]
+    #[unstable(feature = "caller_location", issue = "99999")]
+    pub fn expect_err_at_source_location(self, location: &(&'static str, u32, u32), msg: &str)-> E {
         match self {
-            Ok(t) => unwrap_failed(msg, t),
+            Ok(t) => unwrap_failed(msg, t, location),
             Err(e) => e,
         }
     }
@@ -856,8 +885,8 @@ impl<T: Default, E> Result<T, E> {
 // This is a separate function to reduce the code size of the methods
 #[inline(never)]
 #[cold]
-fn unwrap_failed<E: fmt::Debug>(msg: &str, error: E) -> ! {
-    panic!("{}: {:?}", msg, error)
+fn unwrap_failed<E: fmt::Debug>(msg: &str, error: E, location: &(&'static str, u32, u32)) -> ! {
+    panic_at_source_location!(location, "{}: {:?}", msg, error)
 }
 
 /////////////////////////////////////////////////////////////////////////////
