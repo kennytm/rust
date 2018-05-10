@@ -44,14 +44,15 @@ if grep -q RUST_RELEASE_CHANNEL=beta src/ci/run.sh; then
 fi
 
 function fetch_submodule {
-    local module=$1
-    local cached="download-${module//\//-}.tar.gz"
-    retry sh -c "rm -f $cached && \
-        curl -sSL -o $cached $2"
-    mkdir $module
-    touch "$module/.git"
-    tar -C $module --strip-components=1 -xf $cached
-    rm $cached
+    # local module=$1
+    # local cached="download-${module//\//-}.tar.gz"
+    # retry sh -c "rm -f $cached && \
+    #     curl -sSL -o $cached $2"
+    # mkdir $module
+    # touch "$module/.git"
+    # tar -C $module --strip-components=1 -xf $cached
+    # rm $cached
+    echo $1;
 }
 
 included="src/llvm src/llvm-emscripten src/doc/book src/doc/rust-by-example"

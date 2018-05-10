@@ -93,7 +93,7 @@ travis_time_finish
 
 travis_fold start make-prepare
 travis_time_start
-retry make prepare
+# retry make prepare
 travis_fold end make-prepare
 travis_time_finish
 
