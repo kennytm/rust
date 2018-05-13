@@ -8,13 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-/// The underlying OsString/OsStr implementation on Unix systems: just
-/// a `Vec<u8>`/`[u8]`.
+//! The underlying OsString/OsStr implementation on Unix systems: just
+//! a `Vec<u8>`/`[u8]`.
 
 use borrow::Cow;
 use fmt;
 use str;
 use mem;
+use ops::{Index, Range, RangeFrom, RangeTo};
 use rc::Rc;
 use sync::Arc;
 use sys_common::{AsInner, IntoInner};
@@ -39,6 +40,30 @@ impl fmt::Debug for Slice {
 impl fmt::Display for Slice {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&Utf8Lossy::from_bytes(&self.inner), formatter)
+    }
+}
+
+impl Index<Range<usize>> for Slice {
+    type Output = Slice;
+
+    fn index(&self, range: Range<usize>) -> &Slice {
+        Slice::from_u8_slice(&self.inner[range])
+    }
+}
+
+impl Index<RangeFrom<usize>> for Slice {
+    type Output = Slice;
+
+    fn index(&self, range: RangeFrom<usize>) -> &Slice {
+        Slice::from_u8_slice(&self.inner[range])
+    }
+}
+
+impl Index<RangeTo<usize>> for Slice {
+    type Output = Slice;
+
+    fn index(&self, range: RangeTo<usize>) -> &Slice {
+        Slice::from_u8_slice(&self.inner[range])
     }
 }
 
